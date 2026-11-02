@@ -2,15 +2,24 @@
 
 Patch cho plugin **MSLiveLink 4.6** của Quixel Bridge, để xuất asset Megascans
 ra **Solaris / Karma với MaterialX** trên Houdini 22. Được làm và kiểm chứng
-ngày 2026-10-30 trên Houdini 22.0.368.
+ngày 2026-10-30 trên Houdini 22.0.368, và cập nhật dây normal/displacement
+ngày 2026-11-02 theo đúng cách nối lại trong scene Crown (xem dưới).
 
 ## Patch này làm gì
 
 - Thêm **Renderer: Karma** và **Material Type: MaterialX** vào cửa sổ plugin.
   Material mới (`MaterialsSetup/Karma.py`) tạo `mtlxstandard_surface` với
   albedo (nhân với AO/cavity nếu có), normal qua `mtlxnormalmap`,
-  roughness, metalness, opacity. **Displacement cố tình không nối**, để tránh
-  rủi ro crash khi áp displacement lên toàn bộ terrain lớn.
+  roughness, metalness, opacity.
+- **Cập nhật 2026-11-02 — dây normal/displacement nối lại theo scene Crown:**
+  ảnh normal vào `in` của `mtlxnormalmap`, node `mtlxnormal` (space world)
+  vào `tangent` của `mtlxnormalmap`, Scale của nmap là 1.5, ảnh
+  normal/roughness/displacement dùng `filecolorspace` Raw, và displacement
+  được nối qua `mtlxdisplacement` (Scale 0.2) thay vì bỏ trống như bản
+  2026-10-30. Lưu ý: trong import dạng flat materiallibrary, node
+  displacement được tạo đúng dây vào nhưng không có cổng
+  `displacement_output` như trong subnet, nên cần kiểm tra lại phần
+  displacement khi export thử.
 - Mở khóa **Import Assets on USD Stage** trên Houdini 22: trước đây plugin
   chỉ cho phép USD ở version 18, 19 nên checkbox bị khóa trên H22.
 - Sửa USD Material: chọn Karma thì dùng đúng MaterialX, không bị remap

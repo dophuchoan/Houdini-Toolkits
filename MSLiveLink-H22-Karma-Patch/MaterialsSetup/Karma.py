@@ -1,4 +1,4 @@
-# Karma.py - patched into MSLiveLink 2026-10-30 by Muse, at user request.
+# Karma.py - patched into MSLiveLink 2026-10-30 by Muse, rewired 2026-11-02.
 # Adds Karma / MaterialX support to the Quixel Bridge Houdini plugin.
 # Follows the exact pattern of Mantra.py: a creator class registered in
 # MaterialsCreator, called by ImportSurface with (assetData, importParams,
@@ -8,9 +8,12 @@
 #   - Normal: /mat, or /obj/<Asset>/materialNet for 3D
 # Bridge components use lowercase types: albedo, diffuse, cavity, ao,
 # normal, roughness, metalness, opacity, displacement, specular.
-# Displacement is intentionally NOT connected: Mantra USD mode already
-# forces disp scale 0, and full-terrain displacement is a crash risk
-# (see Crown terrain work). User can add it manually later if needed.
+# Normal + displacement wiring matches the user's live rewiring in
+# Crown on 2026-11-02: mtlxnormal (space world) feeds the normalmap
+# tangent input, normal/roughness/displacement images use filecolorspace
+# Raw, and displacement is connected via mtlxdisplacement (scale 0.2).
+# Previous version left tangent/normal unconnected and left displacement
+# unconnected; that is the wiring the user corrected.
 import hou
 from .MaterialsCreator import MaterialsCreator
 
@@ -27,12 +30,17 @@ def _connect(node, input_name, src):
         return False
 
 
-def _image(container, name, path):
+def _image(container, name, path, filecolorspace=None):
     img = container.createNode("mtlximage", name)
     try:
         img.parm("file").set(path.replace("\\", "/"))
     except Exception as e:
         print("MSLiveLink Karma: set file failed %s: %s" % (name, e))
+    if filecolorspace:
+        try:
+            img.parm("filecolorspace").set(filecolorspace)
+        except Exception:
+            pass
     return img
 
 
@@ -70,16 +78,23 @@ class KarmaMaterialXMaterial:
             else:
                 _connect(surf, "base_color", albedo_node)
         if "normal" in comps:
-            nimg = _image(container, asset_name + "_normal", comps["normal"])
+            nimg = _image(container, asset_name + "_normal", comps["normal"], "Raw")
             nmap = container.createNode("mtlxnormalmap", asset_name + "_nmap")
             try:
-                nmap.parm("scale").set(1.0)
+                nmap.parm("scale").set(1.5)
+            except Exception:
+                pass
+            # User rewiring 2026-11-02: world-space normal node feeds tangent.
+            wnorm = container.createNode("mtlxnormal", asset_name + "_worldnormal")
+            try:
+                wnorm.parm("space").set("world")
             except Exception:
                 pass
             _connect(nmap, "in", nimg)
+            _connect(nmap, "tangent", wnorm)
             _connect(surf, "normal", nmap)
         if "roughness" in comps:
-            rimg = _image(container, asset_name + "_rough", comps["roughness"])
+            rimg = _image(container, asset_name + "_rough", comps["roughness"], "Raw")
             _connect(surf, "specular_roughness", rimg)
         if "metalness" in comps:
             mimg = _image(container, asset_name + "_metal", comps["metalness"])
@@ -87,7 +102,14 @@ class KarmaMaterialXMaterial:
         if "opacity" in comps:
             oimg = _image(container, asset_name + "_opacity", comps["opacity"])
             _connect(surf, "opacity", oimg)
-        # Displacement deliberately not connected (see header).
+        if "displacement" in comps:
+            dimg = _image(container, asset_name + "_disp", comps["displacement"], "Raw")
+            disp = container.createNode("mtlxdisplacement", asset_name + "_displacement")
+            try:
+                disp.parm("scale").set(0.2)
+            except Exception:
+                pass
+            _connect(disp, "displacement", dimg)
         return surf
 
 
